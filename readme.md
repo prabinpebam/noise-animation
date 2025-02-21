@@ -14,7 +14,7 @@ This project demonstrates an animated noise effect with various customizable par
 
 ## Demo
 
-You can view a live demo of the project [here](#).
+You can view a live demo of the project [here](https://prabinpebam.github.io/noise-animation/).
 
 ## Features
 
