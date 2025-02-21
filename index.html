@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Animated Noise with Ripple Effect</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    .canvas-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+    }
+    #noise-canvas {
+      display: block;
+      border: 10px solid #000;
+      border-radius: 20px;
+    }
+    /* Sticky control pane */
+    #control-pane {
+      padding: 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: #f8f9fa;
+    }
+    h4 {
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 5px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <div class="row align-items-center justify-items-center">
+      <!-- Canvas Container -->
+      <div class="col-md-8 canvas-container">
+        <canvas id="noise-canvas" width="600" height="600"></canvas>
+      </div>
+      <!-- Control Pane -->
+      <div class="col-md-4">
+        <div id="control-pane">
+          <!-- Global Noise Parameters -->
+          <h4>Global Noise Parameters</h4>
+          <div class="mb-3">
+            <label for="speed" class="form-label">Animation Speed</label>
+            <input type="range" class="form-range" id="speed" min="0.001" max="0.05" step="0.001" value="0.005">
+            <span id="speedVal">0.005</span>
+          </div>
+          <div class="mb-3">
+            <label for="resolution" class="form-label">Resolution Factor</label>
+            <input type="range" class="form-range" id="resolution" min="0.1" max="1" step="0.1" value="0.9">
+            <span id="resolutionVal">0.9</span>
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="animationToggle" checked>
+            <label class="form-check-label" for="animationToggle">Enable Animation</label>
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="invertNoise" checked>
+            <label class="form-check-label" for="invertNoise">Invert Noise</label>
+          </div>
+          
+          <!-- Perlin 1 Noise Parameters -->
+          <h4>Perlin 1 Noise Parameters</h4>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="enablePerlin" checked>
+            <label class="form-check-label" for="enablePerlin">Enable Perlin 1 Noise</label>
+          </div>
+          <div class="mb-3">
+            <label for="perlinScale" class="form-label">Perlin 1 Scale</label>
+            <input type="range" class="form-range" id="perlinScale" min="0.001" max="0.1" step="0.001" value="0.001">
+            <span id="perlinScaleVal">0.001</span>
+          </div>
+          <div class="mb-3">
+            <label for="perlinBrightness" class="form-label">Perlin 1 Brightness</label>
+            <input type="number" class="form-control" id="perlinBrightness" value="0" step="1">
+            <span id="perlinBrightnessVal">0</span>
+          </div>
+          <div class="mb-3">
+            <label for="perlinContrast" class="form-label">Perlin 1 Contrast</label>
+            <input type="number" class="form-control" id="perlinContrast" value="0" step="0.1">
+            <span id="perlinContrastVal">0</span>
+          </div>
+          
+          <!-- Perlin 2 Noise Parameters -->
+          <h4>Perlin 2 Noise Parameters</h4>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="enablePerlin2" checked>
+            <label class="form-check-label" for="enablePerlin2">Enable Perlin 2 Noise</label>
+          </div>
+          <div class="mb-3">
+            <label for="perlin2Scale" class="form-label">Perlin 2 Scale</label>
+            <input type="range" class="form-range" id="perlin2Scale" min="0.001" max="0.1" step="0.001" value="0.001">
+            <span id="perlin2ScaleVal">0.001</span>
+          </div>
+          <div class="mb-3">
+            <label for="perlin2Brightness" class="form-label">Perlin 2 Brightness</label>
+            <input type="number" class="form-control" id="perlin2Brightness" value="0" step="1">
+            <span id="perlin2BrightnessVal">0</span>
+          </div>
+          <div class="mb-3">
+            <label for="perlin2Contrast" class="form-label">Perlin 2 Contrast</label>
+            <input type="number" class="form-control" id="perlin2Contrast" value="0" step="0.1">
+            <span id="perlin2ContrastVal">0</span>
+          </div>
+          
+          <!-- Stipple Art Parameters -->
+          <h4>Stipple Art Parameters</h4>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="stippleToggle" checked>
+            <label class="form-check-label" for="stippleToggle">Enable Stipple Layer</label>
+          </div>
+          <div class="mb-3">
+            <label for="minDistance" class="form-label">Minimum Distance</label>
+            <input type="range" class="form-range" id="minDistance" min="5" max="30" step="1" value="11">
+            <span id="minDistanceVal">11</span>
+          </div>
+          <div class="mb-3">
+            <label for="minDotSize" class="form-label">Minimum Dot Size</label>
+            <input type="range" class="form-range" id="minDotSize" min="0.1" max="5" step="0.1" value="0.1">
+            <span id="minDotSizeVal">0.1</span>
+          </div>
+          <div class="mb-3">
+            <label for="maxDotSize" class="form-label">Maximum Dot Size</label>
+            <input type="number" class="form-control" id="maxDotSize" value="6" step="0.1">
+            <span id="maxDotSizeVal">6</span>
+          </div>
+          <div class="mb-3">
+            <label for="brightnessThreshold" class="form-label">Brightness Threshold</label>
+            <input type="range" class="form-range" id="brightnessThreshold" min="0" max="255" step="5" value="255">
+            <span id="brightnessThresholdVal">255</span>
+          </div>
+          
+          <!-- Displacement Parameters -->
+          <h4>Displacement Parameters</h4>
+          <div class="mb-3">
+            <label for="displacementAmount" class="form-label">Displacement Amount</label>
+            <input type="number" class="form-control" id="displacementAmount" value="30" step="1">
+            <span id="displacementAmountVal">30</span>
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="displacementToggle" checked>
+            <label class="form-check-label" for="displacementToggle">Enable Displacement</label>
+          </div>
+          
+          <!-- Ripple Effect Parameters -->
+          <h4>Ripple Effect Parameters</h4>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="rippleToggle" checked>
+            <label class="form-check-label" for="rippleToggle">Enable Ripple Effect</label>
+          </div>
+          <div class="mb-3">
+            <label for="rippleAmplitude" class="form-label">Ripple Amplitude</label>
+            <input type="number" class="form-control" id="rippleAmplitude" value="10" step="1">
+            <span id="rippleAmplitudeVal">10</span>
+          </div>
+          <div class="mb-3">
+            <label for="rippleRadius" class="form-label">Ripple Radius</label>
+            <input type="number" class="form-control" id="rippleRadius" value="100" step="1">
+            <span id="rippleRadiusVal">100</span>
+          </div>
+          <div class="mb-3">
+            <label for="rippleSpeed" class="form-label">Ripple Speed</label>
+            <input type="number" class="form-control" id="rippleSpeed" value="0.5" step="0.1">
+            <span id="rippleSpeedVal">0.5</span>
+          </div>
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import perlin noise library -->
+  <script src="https://cdn.jsdelivr.net/npm/perlin@1.0.0/index.min.js"></script>
+  <!-- Import glfx.js (local file) -->
+  <script src="js/glfx.js"></script>
+  <!-- Our custom JS -->
+  <script src="js/main.js"></script>
+</body>
+</html>
