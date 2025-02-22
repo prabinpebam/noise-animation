@@ -24,6 +24,13 @@ document.addEventListener('DOMContentLoaded', function() {
   let perlin2Contrast   = parseFloat(document.getElementById('perlin2Contrast').value);
 
   // ---------------------------
+  // Ripple Effect Parameters (NEW)
+  let rippleEnabled = document.getElementById('rippleToggle').checked;
+  let rippleAmount  = parseFloat(document.getElementById('rippleAmount').value);
+  // We'll maintain an array of ripple objects.
+  let ripples = []; // Each ripple: { x, y, startTime }
+
+  // ---------------------------
   // Stipple Art Parameters
   let minDistance         = parseInt(document.getElementById('minDistance').value);
   let minDotSize          = parseFloat(document.getElementById('minDotSize').value);
@@ -37,34 +44,14 @@ document.addEventListener('DOMContentLoaded', function() {
   let displacementEnabled = document.getElementById('displacementToggle').checked;
 
   // ---------------------------
-  // Ripple Effect Parameters
-  let enableRipple    = document.getElementById('rippleToggle').checked;
-  let rippleAmplitude = parseFloat(document.getElementById('rippleAmplitude').value);
-  let rippleRadius    = parseFloat(document.getElementById('rippleRadius').value);
-  let rippleSpeed     = parseFloat(document.getElementById('rippleSpeed').value);
-  // Set default ripple center to the middle of the composite canvas
-  let rippleCenter    = { x: 300, y: 300 };
-
-  // Update ripple center on mouse move (mapped to composite canvas coordinates)
-  canvas.addEventListener('mousemove', function(e) {
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    // Use composite canvas dimensions for both x and y
-    rippleCenter.x = mouseX * (compositeCanvas.width / canvas.width);
-    rippleCenter.y = mouseY * (compositeCanvas.height / canvas.height);
-  });
-
-  // ---------------------------
   // Setup Offscreen & Composite Canvases
   let baseOffWidth = canvas.width * resolutionFactor;
   let baseOffHeight = canvas.height * resolutionFactor;
-  // Extra vertical margin equal to displacementAmount (scaled)
   function extraMargin() {
     return displacementEnabled ? displacementAmount * resolutionFactor : 0;
   }
   
-  // Offscreen canvas: used for noise generation (extended vertically)
+  // Offscreen canvas for noise generation (extended vertically)
   const offCanvas = document.createElement('canvas');
   const offCtx = offCanvas.getContext('2d');
   
@@ -74,17 +61,8 @@ document.addEventListener('DOMContentLoaded', function() {
   compositeCanvas.height = canvas.height;
   const compositeCtx = compositeCanvas.getContext('2d');
   
-  // Create an fx canvas using glfx.js (for ripple filtering)
-  let fxCanvas;
-  if (typeof fx !== 'undefined') {
-    fxCanvas = fx.canvas();
-  } else {
-    console.warn("glfx.js not loaded; Ripple effect will be disabled.");
-    enableRipple = false;
-  }
-  
   // ---------------------------
-  // Stipple Points Generation & Offscreen Setup
+  // Update Offscreen Canvas Size & Poisson Points for stipple
   let stipplePoints = [];
   function updateOffCanvasSize() {
     baseOffWidth = canvas.width * resolutionFactor;
@@ -118,6 +96,9 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('perlin2Brightness').addEventListener('input', (e) => { perlin2Brightness = parseFloat(e.target.value); updateDisplay('perlin2BrightnessVal', perlin2Brightness); });
   document.getElementById('perlin2Contrast').addEventListener('input', (e) => { perlin2Contrast = parseFloat(e.target.value); updateDisplay('perlin2ContrastVal', perlin2Contrast); });
   
+  document.getElementById('rippleToggle').addEventListener('change', (e) => { rippleEnabled = e.target.checked; });
+  document.getElementById('rippleAmount').addEventListener('input', (e) => { rippleAmount = parseFloat(e.target.value); updateDisplay('rippleAmountVal', rippleAmount); });
+  
   document.getElementById('minDistance').addEventListener('input', (e) => { minDistance = parseInt(e.target.value); updateDisplay('minDistanceVal', minDistance); stipplePoints = generatePoissonPoints(offCanvas.width, offCanvas.height, minDistance); });
   document.getElementById('minDotSize').addEventListener('input', (e) => { minDotSize = parseFloat(e.target.value); updateDisplay('minDotSizeVal', minDotSize); });
   document.getElementById('maxDotSize').addEventListener('input', (e) => { maxDotSize = parseFloat(e.target.value); updateDisplay('maxDotSizeVal', maxDotSize); });
@@ -127,10 +108,16 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('displacementAmount').addEventListener('input', (e) => { displacementAmount = parseFloat(e.target.value); updateDisplay('displacementAmountVal', displacementAmount); updateOffCanvasSize(); });
   document.getElementById('displacementToggle').addEventListener('change', (e) => { displacementEnabled = e.target.checked; updateOffCanvasSize(); });
   
-  document.getElementById('rippleToggle').addEventListener('change', (e) => { enableRipple = e.target.checked; });
-  document.getElementById('rippleAmplitude').addEventListener('input', (e) => { rippleAmplitude = parseFloat(e.target.value); updateDisplay('rippleAmplitudeVal', rippleAmplitude); });
-  document.getElementById('rippleRadius').addEventListener('input', (e) => { rippleRadius = parseFloat(e.target.value); updateDisplay('rippleRadiusVal', rippleRadius); });
-  document.getElementById('rippleSpeed').addEventListener('input', (e) => { rippleSpeed = parseFloat(e.target.value); updateDisplay('rippleSpeedVal', rippleSpeed); });
+  // ---------------------------
+  // Trigger a new ripple on mousemove (NEW)
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    // Coordinates relative to the canvas
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    // Add a new ripple with its origin fixed at the mouse location.
+    ripples.push({ x, y, startTime: performance.now() });
+  });
   
   // ---------------------------
   // Poisson Disk Sampling Implementation
@@ -185,11 +172,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // Generate Noise Image on offCanvas (extended region)
   function generateNoiseImage() {
     const width = offCanvas.width;
-    const extHeight = offCanvas.height; // baseOffHeight + extra margin
+    const extHeight = offCanvas.height;
     const imageData = offCtx.createImageData(width, extHeight);
     const data = imageData.data;
     const cx = width / 2;
-    const cy = baseOffHeight / 2; // center of base region
+    const cy = baseOffHeight / 2;
     for (let y = 0; y < extHeight; y++) {
       for (let x = 0; x < width; x++) {
         const nx = (x - cx) * perlinScale;
@@ -215,7 +202,6 @@ document.addEventListener('DOMContentLoaded', function() {
           perlinVal = 255 - perlinVal;
           perlin2Val = 255 - perlin2Val;
         }
-        // Combine the two noise values by averaging them
         let combined = (perlinVal + perlin2Val) / 2;
         combined = Math.max(0, Math.min(255, Math.floor(combined)));
         const idx = (y * width + x) * 4;
@@ -229,11 +215,182 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   // ---------------------------
-  // Helper: Sample brightness from imageData at (x, y)
-  function sampleBrightness(imageData, x, y) {
-    const ix = Math.floor(Math.max(0, Math.min(x, imageData.width - 1)));
-    const iy = Math.floor(Math.max(0, Math.min(y, imageData.height - 1)));
-    return imageData.data[(iy * imageData.width + ix) * 4];
+  // Displacement Texture for Ripple Effect (NEW)
+  // Create an offscreen canvas to serve as the displacement texture.
+  const displacementCanvas = document.createElement('canvas');
+  displacementCanvas.width = compositeCanvas.width;
+  displacementCanvas.height = compositeCanvas.height;
+  const dispCtx = displacementCanvas.getContext('2d');
+  // This function updates the displacement texture by drawing all active ripples.
+  function updateDisplacementTexture() {
+    // Clear to black
+    dispCtx.clearRect(0, 0, displacementCanvas.width, displacementCanvas.height);
+    // Use additive blending to sum ripple effects
+    dispCtx.globalCompositeOperation = 'lighter';
+    const currentTime = performance.now();
+    // Ripple settings (in seconds and pixels)
+    const rippleDuration = 1.5; // ripple lasts 1.5 seconds
+    const rippleSpeed = 150;    // expands at 150 pixels per second
+    // Draw each ripple
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const ripple = ripples[i];
+      const age = (currentTime - ripple.startTime) / 1000;
+      if (age > rippleDuration) {
+        ripples.splice(i, 1);
+        continue;
+      }
+      const radius = rippleSpeed * age;
+      // Amplitude decays linearly from the initial rippleAmount to 0.
+      const amplitude = rippleAmount * (1 - age / rippleDuration);
+      const a = Math.min(amplitude, 1.0);
+      // Create a radial gradient: white (scaled by amplitude) at the center to black at the edge.
+      let grad = dispCtx.createRadialGradient(ripple.x, ripple.y, 0, ripple.x, ripple.y, radius);
+      grad.addColorStop(0, `rgba(${Math.floor(a * 255)}, ${Math.floor(a * 255)}, ${Math.floor(a * 255)}, 1)`);
+      grad.addColorStop(1, 'rgba(0,0,0,1)');
+      dispCtx.fillStyle = grad;
+      dispCtx.beginPath();
+      dispCtx.arc(ripple.x, ripple.y, radius, 0, Math.PI * 2);
+      dispCtx.fill();
+    }
+    dispCtx.globalCompositeOperation = 'source-over';
+  }
+  
+  // ---------------------------
+  // Setup WebGL for Ripple Effect (NEW)
+  const rippleCanvas = document.createElement('canvas');
+  rippleCanvas.width = compositeCanvas.width;
+  rippleCanvas.height = compositeCanvas.height;
+  const gl = rippleCanvas.getContext('webgl');
+  
+  // Define shader sources (updated to remove uMouse)
+  const vertexShaderSource = `
+    attribute vec2 aPosition;
+    attribute vec2 aTexCoord;
+    varying vec2 vUv;
+    void main() {
+      vUv = aTexCoord;
+      gl_Position = vec4(aPosition, 0.0, 1.0);
+    }
+  `;
+  
+  const fragmentShaderSource = `
+    precision mediump float;
+    uniform sampler2D uTexture;
+    uniform sampler2D uDisplacement;
+    uniform vec4 winResolution;
+    uniform float rippleAmount;
+    varying vec2 vUv;
+    float PI = 3.141592653589793238;
+    
+    void main() {
+      vec2 vUvScreen = gl_FragCoord.xy / winResolution.xy;
+      vec4 displacement = texture2D(uDisplacement, vUvScreen);
+      float theta = displacement.r * 2.0 * PI;
+      vec2 dir = vec2(sin(theta), cos(theta));
+      vec2 uv = vUvScreen + dir * displacement.r * rippleAmount;
+      vec4 color = texture2D(uTexture, uv);
+      gl_FragColor = color;
+    }
+  `;
+  
+  // Helper functions to compile shaders and create program
+  function compileShader(source, type) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error('Shader compile failed with: ' + gl.getShaderInfoLog(shader));
+      gl.deleteShader(shader);
+      return null;
+    }
+    return shader;
+  }
+  
+  function createProgram(vertexSource, fragmentSource) {
+    const vertexShader = compileShader(vertexSource, gl.VERTEX_SHADER);
+    const fragmentShader = compileShader(fragmentSource, gl.FRAGMENT_SHADER);
+    const program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error('Program failed to link: ' + gl.getProgramInfoLog(program));
+      return null;
+    }
+    return program;
+  }
+  
+  const rippleProgram = createProgram(vertexShaderSource, fragmentShaderSource);
+  gl.useProgram(rippleProgram);
+  
+  // Set up a full-screen quad
+  const quadVertices = new Float32Array([
+    -1, -1,  0, 0,
+     1, -1,  1, 0,
+    -1,  1,  0, 1,
+    -1,  1,  0, 1,
+     1, -1,  1, 0,
+     1,  1,  1, 1,
+  ]);
+  const quadBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+  
+  const aPosition = gl.getAttribLocation(rippleProgram, 'aPosition');
+  const aTexCoord = gl.getAttribLocation(rippleProgram, 'aTexCoord');
+  gl.enableVertexAttribArray(aPosition);
+  gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(aTexCoord);
+  gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 16, 8);
+  
+  // Get uniform locations
+  const uTextureLoc = gl.getUniformLocation(rippleProgram, 'uTexture');
+  const uDisplacementLoc = gl.getUniformLocation(rippleProgram, 'uDisplacement');
+  const winResolutionLoc = gl.getUniformLocation(rippleProgram, 'winResolution');
+  const rippleAmountLoc = gl.getUniformLocation(rippleProgram, 'rippleAmount');
+  
+  gl.uniform4f(winResolutionLoc, rippleCanvas.width, rippleCanvas.height, 0, 0);
+  
+  // Create textures for the noise image and the displacement map
+  const noiseTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, noiseTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  
+  const displacementTextureGL = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, displacementTextureGL);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  
+  // Function to apply the ripple effect using WebGL (NEW)
+  function applyRippleEffect(noiseImageData) {
+    // Upload noise image as texture to unit 0
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, noiseTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, noiseImageData.width, noiseImageData.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, noiseImageData.data);
+    gl.uniform1i(uTextureLoc, 0);
+    
+    // Upload updated displacement canvas as texture to unit 1 using the HTMLCanvasElement overload.
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, displacementTextureGL);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, displacementCanvas);
+    gl.uniform1i(uDisplacementLoc, 1);
+    
+    // Set ripple amplitude uniform
+    gl.uniform1f(rippleAmountLoc, rippleAmount);
+    
+    // Draw the quad
+    gl.viewport(0, 0, rippleCanvas.width, rippleCanvas.height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    
+    // Read the pixels from the WebGL canvas into an ImageData object
+    const pixels = new Uint8Array(rippleCanvas.width * rippleCanvas.height * 4);
+    gl.readPixels(0, 0, rippleCanvas.width, rippleCanvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return new ImageData(new Uint8ClampedArray(pixels), rippleCanvas.width, rippleCanvas.height);
   }
   
   // ---------------------------
@@ -262,10 +419,17 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Draw Original Noise (without stipple) onto compositeCanvas (only base region)
   function drawNoise(imageData) {
-    // Update offCanvas with the latest noise image
     offCtx.putImageData(imageData, 0, 0);
     compositeCtx.clearRect(0, 0, compositeCanvas.width, compositeCanvas.height);
     compositeCtx.drawImage(offCanvas, 0, 0, offCanvas.width, baseOffHeight, 0, 0, compositeCanvas.width, compositeCanvas.height);
+  }
+  
+  // ---------------------------
+  // Helper: Sample brightness from imageData at (x, y)
+  function sampleBrightness(imageData, x, y) {
+    const ix = Math.floor(Math.max(0, Math.min(x, imageData.width - 1)));
+    const iy = Math.floor(Math.max(0, Math.min(y, imageData.height - 1)));
+    return imageData.data[(iy * imageData.width + ix) * 4];
   }
   
   // ---------------------------
@@ -274,49 +438,23 @@ document.addEventListener('DOMContentLoaded', function() {
   function animate() {
     requestAnimationFrame(animate);
     if (animationEnabled) { time += speed; }
-    const noiseImageData = generateNoiseImage();
-    if (stippleEnabled) {
-      drawStipple(noiseImageData);
+    // Update noise image
+    let noiseImageData = generateNoiseImage();
+    
+    // If ripple effect is enabled, update the displacement texture from all active ripples.
+    if (rippleEnabled) {
+      updateDisplacementTexture();
+      noiseImageData = applyRippleEffect(noiseImageData);
+      compositeCtx.putImageData(noiseImageData, 0, 0);
     } else {
       drawNoise(noiseImageData);
     }
-    
-    // If ripple effect is enabled, apply the bulgePinch filter using fxCanvas
-    if (enableRipple && fxCanvas) {
-      try {
-        // Ensure fxCanvas matches composite canvas dimensions
-        fxCanvas.width = compositeCanvas.width;
-        fxCanvas.height = compositeCanvas.height;
-        
-        const texture = fxCanvas.texture(compositeCanvas);
-        const normCenter = [
-          rippleCenter.x / compositeCanvas.width, 
-          rippleCenter.y / compositeCanvas.height
-        ];
-        // Compute ripple strength scaled down (assumes rippleAmplitude is in a larger range)
-        const rippleStrength = (rippleAmplitude * Math.sin(time * rippleSpeed)) / 100;
-        const normRadius = rippleRadius / compositeCanvas.width;
-        
-        // Log parameters for debugging
-        console.log("Ripple Params:", {
-          normCenter,
-          normRadius,
-          rippleStrength
-        });
-        
-        fxCanvas.draw(texture)
-                .bulgePinch(normCenter[0], normCenter[1], normRadius, rippleStrength)
-                .update();
-                
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(fxCanvas, 0, 0, canvas.width, canvas.height);
-      } catch (e) {
-        console.error("Ripple effect error:", e);
-        ctx.drawImage(compositeCanvas, 0, 0, canvas.width, canvas.height);
-      }
-    } else {
-      ctx.drawImage(compositeCanvas, 0, 0, canvas.width, canvas.height);
+       
+    // If stipple is enabled, draw stipple art on top of the current composite background.
+    if (stippleEnabled) {
+      drawStipple(noiseImageData);
     }
+    ctx.drawImage(compositeCanvas, 0, 0, canvas.width, canvas.height);
   }
   
   animate();
